@@ -14,7 +14,7 @@ Install
 Package Dependencies
 --------------------
 
-* [github.com/nsf/termbox-go](https://github.com/nsf/termbox-go) ([doc](http://gopkgdoc.appspot.com/pkg/github.com/nsf/termbox-go))
+* [github.com/nsf/termbox-go](https://github.com/nsf/termbox-go) ([doc](http://godoc.org/github.com/nsf/termbox-go))
 
-(documentation provided by [GoPkgDoc](http://gopkgdoc.appspot.com/index))
+(documentation provided by [GoPkgDoc](http://godoc.org/))
 
