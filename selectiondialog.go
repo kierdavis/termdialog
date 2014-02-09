@@ -27,20 +27,26 @@ type Option struct {
 // Type SelectionDialog represents a dialog with a number of selectable options.
 type SelectionDialog struct {
 	BaseDialog
-	options       []*Option
-	selectedIndex int
+	options           []*Option
+	selectedIndex     int
+	maxVisibleOptions int // if > 0, scrolling activated, window height limited to the value
+	topIndex          int
 }
 
 // Function NewSelectionDialog creates and returns a new selection dialog. The options argument can
 // be nil, and an empty slice will be created (options can be added later with AddOption).
-func NewSelectionDialog(title string, options []*Option) (dialog *SelectionDialog) {
+// Set maxVisibleOptions to get scrolling feature. Designed for compatibility.
+func NewSelectionDialog(title string, options []*Option, maxVisibleOptions ...int) (dialog *SelectionDialog) {
 	if options == nil {
 		options = make([]*Option, 0)
 	}
 
 	dialog = &SelectionDialog{
-		options:       options,
-		selectedIndex: 0,
+		options: options,
+	}
+
+	if maxVisibleOptions != nil {
+		dialog.maxVisibleOptions = maxVisibleOptions[0]
 	}
 
 	dialog.BaseDialog.title = title
@@ -80,12 +86,13 @@ func (dialog *SelectionDialog) FindOption(option *Option) (n int) {
 			return n
 		}
 	}
-
 	return -1
 }
 
 func (dialog *SelectionDialog) ClearOptions() {
 	dialog.options = make([]*Option, 0)
+	dialog.topIndex = 0
+	dialog.selectedIndex = 0
 	dialog.metricsDirty = true
 }
 
@@ -99,10 +106,12 @@ func (dialog *SelectionDialog) GetSelectedOption() (option *Option) {
 
 func (dialog *SelectionDialog) SetSelectedIndex(selectedIndex int) {
 	dialog.selectedIndex = selectedIndex
+	dialog.metricsDirty = true // ?
 }
 
 func (dialog *SelectionDialog) SetSelectionOption(option *Option) {
 	dialog.selectedIndex = dialog.FindOption(option)
+	dialog.metricsDirty = true //?
 }
 
 func (dialog *SelectionDialog) CalcMetrics() {
@@ -120,8 +129,14 @@ func (dialog *SelectionDialog) CalcMetrics() {
 		maxWidth = len(dialog.title)
 	}
 
-	dialog.width = 6 + maxWidth             // 6 = "|  " + "  |"
-	dialog.height = 6 + len(dialog.options) // 6 = Top border, Top padding, Title, Under-title padding, Bottom padding, Bottom border
+	dialog.width = 6 + maxWidth // 6 = "|  " + "  |"
+	dialog.height += 6          // 6 = Top border, Top padding, Title, Under-title padding, Bottom padding, Bottom border
+
+	if dialog.maxVisibleOptions > 0 {
+		dialog.height += dialog.maxVisibleOptions
+	} else {
+		dialog.height += len(dialog.options)
+	}
 
 	dialog.x = (windowWidth / 2) - (dialog.width / 2)
 	dialog.y = (windowHeight / 2) - (dialog.height / 2)
@@ -129,17 +144,36 @@ func (dialog *SelectionDialog) CalcMetrics() {
 	dialog.metricsDirty = false
 }
 
+func min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
+
 func (dialog *SelectionDialog) Open() {
 	BaseDialogOpen(dialog)
 
-	for i, option := range dialog.options {
+	if len(dialog.options) <= dialog.maxVisibleOptions {
+		dialog.topIndex = 0
+	}
+
+	cnt := len(dialog.options)
+
+	if dialog.maxVisibleOptions > 0 {
+		cnt = min(cnt, dialog.topIndex+dialog.maxVisibleOptions)
+	}
+
+	k := 0
+	for i := dialog.topIndex; i < cnt; i++ {
 		style := dialog.theme.InactiveItem
 
 		if i == dialog.selectedIndex {
 			style = dialog.theme.ActiveItem
 		}
 
-		DrawString(dialog.x+3, dialog.y+4+i, fmt.Sprintf("* %s", option.Text), style)
+		DrawString(dialog.x+3, dialog.y+4+k, fmt.Sprintf("* %s", dialog.options[i].Text), style)
+		k++
 	}
 }
 
@@ -157,6 +191,10 @@ func (dialog *SelectionDialog) HandleEvent(event termbox.Event) (handled bool, s
 		case termbox.KeyArrowUp:
 			if dialog.selectedIndex > 0 {
 				dialog.selectedIndex--
+				if (dialog.maxVisibleOptions > 0) && (dialog.selectedIndex < dialog.topIndex) {
+					dialog.topIndex--
+				}
+
 			}
 
 			return true, false
@@ -164,18 +202,24 @@ func (dialog *SelectionDialog) HandleEvent(event termbox.Event) (handled bool, s
 		case termbox.KeyArrowDown:
 			if dialog.selectedIndex < maxOption {
 				dialog.selectedIndex++
+
+				if (dialog.maxVisibleOptions > 0) && (dialog.selectedIndex == dialog.topIndex+dialog.maxVisibleOptions) {
+					dialog.topIndex++
+				}
 			}
 
 			return true, false
 
 		case termbox.KeyHome:
 			dialog.selectedIndex = 0
-
+			dialog.topIndex = 0
 			return true, false
 
 		case termbox.KeyEnd:
 			dialog.selectedIndex = maxOption
-
+			if dialog.maxVisibleOptions > 0 {
+				dialog.topIndex = maxOption - dialog.maxVisibleOptions + 1
+			}
 			return true, false
 
 		case termbox.KeyEnter, termbox.KeySpace:
